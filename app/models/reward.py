@@ -26,6 +26,7 @@ class RewardClaim(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     reward_id = Column(Integer, ForeignKey("rewards.id"), nullable=False)
+    status = Column(String, default="claimed")
     
     # XATONI TUZATISH: created_at nomi claimed_at ga o'zgartirildi
     # Bu API route'dagi RewardClaim.claimed_at bilan moslikni ta'minlaydi

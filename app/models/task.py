@@ -11,6 +11,7 @@ class Task(Base):
     description = Column(String)
     task_type = Column(String, default="general")
     reward_points = Column(Integer, default=10)
+    is_completed = Column(Boolean, default=False)
     # is_active ustuni bazada yo'q bo'lsa, uni vaqtincha komment qiling:
     # is_active = Column(Boolean, default=True) 
     created_at = Column(DateTime, default=datetime.utcnow)
