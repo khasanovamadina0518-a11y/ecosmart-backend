@@ -1,0 +1,12 @@
+import asyncio
+from sqlalchemy import inspect
+from app.core.database import engine
+
+async def check():
+    async with engine.connect() as conn:
+        # Jadvallar ro'yxatini olish (sinxron rejimda)
+        tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
+        print(f"\n✅ MUVAFFAQIYATLI! Bazadagi jadvallar: {tables}\n")
+
+if __name__ == "__main__":
+    asyncio.run(check())
