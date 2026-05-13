@@ -7,7 +7,7 @@ WORKDIR /app
 # ── Environment Variables ─────────────────────────
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8000
+    PORT=7860
 
 # ── Install System Dependencies ───────────────────
 RUN apt-get update && apt-get install -y \
@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # ── Expose Port ───────────────────────────────────
-EXPOSE $PORT
+EXPOSE 7860
 
 # ── Run Application ───────────────────────────────
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
