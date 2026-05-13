@@ -1,74 +1,89 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
+﻿from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
+from app.core.security import create_access_token, get_current_user, get_password_hash, verify_password
 from app.models.user import User
-from app.core.security import create_access_token, verify_password
+from app.schemas.user import Token, UserCreate, UserLogin, UserResponse
 
 router = APIRouter()
 
-@router.post("/login")
-async def login(
-    credentials: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
-):
-    # 1. Debug: Terminalda kiritilgan ma'lumotni ko'rish
-    print(f"\n--- LOGIN URINISHI ---")
-    print(f"Kiritilgan username (phone): '{credentials.username}'")
 
-    # 2. Bazadagi barcha foydalanuvchilarni tekshirish (faqat debug uchun)
-    all_users_result = await db.execute(select(User))
-    users_list = all_users_result.scalars().all()
-    print(f"Bazadagi jami foydalanuvchilar soni: {len(users_list)}")
-    for u in users_list:
-        print(f"Bazada bor raqam: '{u.phone}'")
-
-    # 3. Foydalanuvchini qidirish
-    result = await db.execute(select(User).where(User.phone == credentials.username))
+@router.post("/login", response_model=Token)
+async def login(payload: UserLogin = Body(...), db: AsyncSession = Depends(get_db)):
+    # Telefon raqamini normalize qilish (+ belgisini olib tashlash)
+    phone = payload.phone.strip().replace('+', '').replace(' ', '').replace('-', '')
+    print(f"🔐 Login urinishi: phone={phone} (original: {payload.phone})")
+    
+    result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalars().first()
 
-    # 4. Foydalanuvchi topilmasa
     if not user:
-        print(f"XATO: '{credentials.username}' raqami bazadan topilmadi!")
+        print(f"❌ Foydalanuvchi topilmadi: {phone}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Foydalanuvchi topilmadi. Avval ro'yxatdan o'ting."
+            detail="Telefon yoki parol noto'g'ri.",
+        )
+    
+    print(f"✅ Foydalanuvchi topildi: {user.full_name} (ID: {user.id})")
+    print(f"🔑 Parolni tekshirish...")
+    
+    password_valid = verify_password(payload.password, user.hashed_password)
+    print(f"🔑 Parol tekshiruvi natijasi: {password_valid}")
+    
+    if not password_valid:
+        print(f"❌ Parol noto'g'ri!")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Telefon yoki parol noto'g'ri.",
         )
 
-    # 5. TEST UCHUN: Parol tekshirishni vaqtincha o'chirib turamiz
-    # Agar parolni ham tekshirmoqchi bo'lsangiz, pastdagi 2 qatorni kommentdan oching:
-    # if not verify_password(credentials.password, user.hashed_password):
-    #     raise HTTPException(status_code=401, detail="Parol noto'g'ri")
-
-    # 6. Muvaffaqiyatli login - Token yaratish
-    print(f"MUVAFFAQIYAT: '{user.phone}' uchun token yaratildi.")
+    print(f"✅ Login muvaffaqiyatli: {user.full_name}")
     access_token = create_access_token(data={"sub": user.phone})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    return Token(access_token=access_token)
 
-@router.post("/register")
-async def register(
-    full_name: str,
-    phone: str,
-    password: str,
-    db: AsyncSession = Depends(get_db)
-):
-    # Ro'yxatdan o'tishda raqam borligini tekshirish
-    result = await db.execute(select(User).where(User.phone == phone))
-    if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Bu raqam allaqachon ro'yxatdan o'tgan")
+
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+async def register(payload: UserCreate = Body(...), db: AsyncSession = Depends(get_db)):
+    # Telefon raqamini normalize qilish (+ belgisini olib tashlash)
+    phone = payload.phone.strip().replace('+', '').replace(' ', '').replace('-', '')
     
-    # Yangi foydalanuvchi yaratish (parolni hashlashni unutmang)
-    from app.core.security import get_password_hash
+    # Debug: Kelgan ma'lumotlarni ko'rsatish
+    print(f"📥 Kelgan ma'lumotlar: full_name={payload.full_name}, phone={phone} (original: {payload.phone}), city={payload.city}, region={payload.region}")
+    
+    result = await db.execute(select(User).where(User.phone == phone))
+    existing_user = result.scalars().first()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bu raqam allaqachon ro'yxatdan o'tgan.",
+        )
+
     new_user = User(
-        full_name=full_name,
+        full_name=payload.full_name,
         phone=phone,
-        hashed_password=get_password_hash(password)
+        hashed_password=get_password_hash(payload.password),
     )
     db.add(new_user)
     await db.commit()
-    return {"message": "Muvaffaqiyatli ro'yxatdan o'tdingiz"}
+    await db.refresh(new_user)
+
+    print(f"✅ Yangi foydalanuvchi yaratildi: {new_user.id} - {new_user.full_name}")
+    return {"message": "Muvaffaqiyatli ro'yxatdan o'tdingiz."}
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: User = Depends(get_current_user)):
+    return UserResponse(
+        id=current_user.id,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        username=None,
+        email=None,
+        city=None,
+        eco_points=current_user.points or 0,
+        eco_level=current_user.eco_level or 1,
+        created_at=current_user.created_at,
+    )

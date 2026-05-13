@@ -1,16 +1,14 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict
 
 class UserCreate(BaseModel):
     """Ro'yxatdan o'tish uchun schema."""
     full_name: str = Field(..., min_length=2, max_length=100, description="To'liq ism")
     phone: str = Field(..., description="Telefon raqam")
     password: str = Field(..., min_length=6, max_length=100, description="Parol")
-    # Ixtiyoriy maydonlar:
-    username: Optional[str] = Field(None, min_length=3, max_length=50, description="Foydalanuvchi nomi")
-    email: Optional[EmailStr] = Field(None, description="Email")
-    city: Optional[str] = Field(None, max_length=100, description="Shahar")
+    city: Optional[str] = Field(None, max_length=100, description="Shahar (ixtiyoriy)")
+    region: Optional[str] = Field(None, max_length=100, description="Viloyat (ixtiyoriy)")
 
 class UserLogin(BaseModel):
     """Login uchun schema."""
@@ -22,11 +20,9 @@ class UserResponse(BaseModel):
     id: int
     full_name: str
     phone: str
-    username: Optional[str]
-    email: Optional[str]
-    city: Optional[str]
-    eco_points: int = 0
+    points: int = 0
     eco_level: int = 1
+    is_active: bool = True
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
